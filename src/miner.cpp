@@ -11,6 +11,7 @@
 #include "consensus/validation.h"
 #include "hash.h"
 #include "main.h"
+#include "metrics.h"
 #include "net.h"
 #include "pow.h"
 #include "primitives/transaction.h"
@@ -436,6 +437,8 @@ static bool ProcessBlockFound(CBlock* pblock, CWallet& wallet, CReserveKey& rese
     if (!ProcessNewBlock(state, NULL, pblock, true, NULL))
         return error("ZcashMiner: ProcessNewBlock, block not accepted");
 
+    minedBlocks.increment();
+
     return true;
 }
 
@@ -550,8 +553,11 @@ void static BitcoinMiner(CWallet *pwallet)
                     SetThreadPriority(THREAD_PRIORITY_LOWEST);
 
                     // In regression test mode, stop mining after a block is found.
-                    if (chainparams.MineBlocksOnDemand())
+                    if (chainparams.MineBlocksOnDemand()) {
+                        // Increment here because throwing skips the call below
+                        ehSolverRuns.increment();
                         throw boost::thread_interrupted();
+                    }
 
                     return true;
                 };
@@ -561,8 +567,11 @@ void static BitcoinMiner(CWallet *pwallet)
                 };
                 try {
                     // If we find a valid block, we rebuild
-                    if (EhOptimisedSolve(n, k, curr_state, validBlock, cancelled))
+                    bool found = EhOptimisedSolve(n, k, curr_state, validBlock, cancelled);
+                    ehSolverRuns.increment();
+                    if (found) {
                         break;
+                    }
                 } catch (EhSolverCancelledException&) {
                     LogPrint("pow", "Equihash solver cancelled\n");
                     std::lock_guard<std::mutex> lock{m_cs};
