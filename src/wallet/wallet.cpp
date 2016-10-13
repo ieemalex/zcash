@@ -648,8 +648,10 @@ void CWallet::IncrementNoteWitnesses(const CBlockIndex* pindex,
                 assert(nWitnessCacheSize >= nd->witnesses.size());
                 // Only increment witnesses that are behind the current height
                 if (nd->witnessHeight < pindex->nHeight) {
-                    // Witnesses being incremented should always be one below pindex
-                    assert(nd->witnessHeight == pindex->nHeight - 1);
+                    // Witnesses being incremented should always be either -1
+                    // (never incremented) or one below pindex
+                    assert((nd->witnessHeight == -1) ||
+                           (nd->witnessHeight == pindex->nHeight - 1));
                     // Copy the witness for the previous block if we have one
                     if (nd->witnesses.size() > 0) {
                         nd->witnesses.push_front(nd->witnesses.front());
