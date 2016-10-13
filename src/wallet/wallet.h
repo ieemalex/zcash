@@ -213,8 +213,12 @@ public:
      */
     std::list<ZCIncrementalWitness> witnesses;
 
-    CNoteData() : address(), nullifier() { }
-    CNoteData(libzcash::PaymentAddress a, uint256 n) : address {a}, nullifier {n} { }
+    /** Block height corresponding to the most current witness. */
+    int witnessHeight;
+
+    CNoteData() : address(), nullifier(), witnessHeight {-1} { }
+    CNoteData(libzcash::PaymentAddress a, uint256 n) :
+            address {a}, nullifier {n}, witnessHeight {-1} { }
 
     ADD_SERIALIZE_METHODS;
 
@@ -223,6 +227,7 @@ public:
         READWRITE(address);
         READWRITE(nullifier);
         READWRITE(witnesses);
+        READWRITE(witnessHeight);
     }
 
     friend bool operator<(const CNoteData& a, const CNoteData& b) {
@@ -603,7 +608,7 @@ public:
 protected:
     void IncrementNoteWitnesses(const CBlockIndex* pindex,
                                 const CBlock* pblock,
-                                ZCIncrementalMerkleTree tree);
+                                ZCIncrementalMerkleTree& tree);
     void DecrementNoteWitnesses();
     void WriteWitnessCache();
 

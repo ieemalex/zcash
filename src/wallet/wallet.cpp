@@ -637,7 +637,7 @@ void CWallet::ClearNoteWitnessCache()
 
 void CWallet::IncrementNoteWitnesses(const CBlockIndex* pindex,
                                      const CBlock* pblockIn,
-                                     ZCIncrementalMerkleTree tree)
+                                     ZCIncrementalMerkleTree& tree)
 {
     {
         LOCK(cs_wallet);
@@ -646,12 +646,17 @@ void CWallet::IncrementNoteWitnesses(const CBlockIndex* pindex,
                 CNoteData* nd = &(item.second);
                 // Check the validity of the cache
                 assert(nWitnessCacheSize >= nd->witnesses.size());
-                // Copy the witness for the previous block if we have one
-                if (nd->witnesses.size() > 0) {
-                    nd->witnesses.push_front(nd->witnesses.front());
-                }
-                if (nd->witnesses.size() > WITNESS_CACHE_SIZE) {
-                    nd->witnesses.pop_back();
+                // Only increment witnesses that are behind the current height
+                if (nd->witnessHeight < pindex->nHeight) {
+                    // Witnesses being incremented should always be one below pindex
+                    assert(nd->witnessHeight == pindex->nHeight - 1);
+                    // Copy the witness for the previous block if we have one
+                    if (nd->witnesses.size() > 0) {
+                        nd->witnesses.push_front(nd->witnesses.front());
+                    }
+                    if (nd->witnesses.size() > WITNESS_CACHE_SIZE) {
+                        nd->witnesses.pop_back();
+                    }
                 }
             }
         }
@@ -676,7 +681,8 @@ void CWallet::IncrementNoteWitnesses(const CBlockIndex* pindex,
                     for (std::pair<const uint256, CWalletTx>& wtxItem : mapWallet) {
                         for (mapNoteData_t::value_type& item : wtxItem.second.mapNoteData) {
                             CNoteData* nd = &(item.second);
-                            if (nd->witnesses.size() > 0) {
+                            if (nd->witnessHeight < pindex->nHeight &&
+                                    nd->witnesses.size() > 0) {
                                 nd->witnesses.front().append(note_commitment);
                             }
                         }
@@ -688,11 +694,25 @@ void CWallet::IncrementNoteWitnesses(const CBlockIndex* pindex,
                         if (mapWallet[hash].mapNoteData.count(jsoutpt)) {
                             mapWallet[hash].mapNoteData[jsoutpt].witnesses.push_front(
                                 tree.witness());
+                            // Set height to one less than pindex so it gets incremented
+                            mapWallet[hash].mapNoteData[jsoutpt].witnessHeight =
+                                pindex->nHeight - 1;
                         }
                     }
                 }
             }
         }
+
+        // Update witness heights
+        for (std::pair<const uint256, CWalletTx>& wtxItem : mapWallet) {
+            for (mapNoteData_t::value_type& item : wtxItem.second.mapNoteData) {
+                CNoteData* nd = &(item.second);
+                if (nd->witnessHeight < pindex->nHeight) {
+                    nd->witnessHeight = pindex->nHeight;
+                }
+            }
+        }
+
         if (nWitnessCacheSize < WITNESS_CACHE_SIZE) {
             nWitnessCacheSize += 1;
         }
@@ -712,6 +732,7 @@ void CWallet::DecrementNoteWitnesses()
                 if (nd->witnesses.size() > 0) {
                     nd->witnesses.pop_front();
                 }
+                nd->witnessHeight -= 1;
             }
         }
         nWitnessCacheSize -= 1;
@@ -1643,6 +1664,14 @@ int CWallet::ScanForWalletTransactions(CBlockIndex* pindexStart, bool fUpdate)
                 if (AddToWalletIfInvolvingMe(tx, &block, fUpdate))
                     ret++;
             }
+
+            ZCIncrementalMerkleTree tree;
+            // This should never fail: we should always be able to get the tree
+            // state on the path to the tip of our chain
+            assert(pcoinsTip->GetAnchorAt(pindex->hashAnchor, tree));
+            // Increment note witness caches
+            IncrementNoteWitnesses(pindex, &block, tree);
+
             pindex = chainActive.Next(pindex);
             if (GetTime() >= nNow + 60) {
                 nNow = GetTime();

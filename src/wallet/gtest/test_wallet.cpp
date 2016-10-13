@@ -545,8 +545,9 @@ TEST(wallet_tests, cached_witnesses_empty_chain) {
 
     CBlock block;
     block.vtx.push_back(wtx);
+    CBlockIndex index(block);
     ZCIncrementalMerkleTree tree;
-    wallet.IncrementNoteWitnesses(NULL, &block, tree);
+    wallet.IncrementNoteWitnesses(&index, &block, tree);
     witnesses.clear();
     wallet.GetNoteWitnesses(notes, witnesses, anchor);
     EXPECT_TRUE((bool) witnesses[0]);
@@ -584,7 +585,8 @@ TEST(wallet_tests, cached_witnesses_chain_tip) {
 
         // First block (case tested in _empty_chain)
         block1.vtx.push_back(wtx);
-        wallet.IncrementNoteWitnesses(NULL, &block1, tree);
+        CBlockIndex index1(block1);
+        wallet.IncrementNoteWitnesses(&index1, &block1, tree);
         // Called to fetch anchor
         wallet.GetNoteWitnesses(notes, witnesses, anchor1);
     }
@@ -613,8 +615,9 @@ TEST(wallet_tests, cached_witnesses_chain_tip) {
         CBlock block2;
         block2.hashPrevBlock = block1.GetHash();
         block2.vtx.push_back(wtx);
+        CBlockIndex index2(block2);
         ZCIncrementalMerkleTree tree2 {tree};
-        wallet.IncrementNoteWitnesses(NULL, &block2, tree2);
+        wallet.IncrementNoteWitnesses(&index2, &block2, tree2);
         witnesses.clear();
         wallet.GetNoteWitnesses(notes, witnesses, anchor2);
         EXPECT_TRUE((bool) witnesses[0]);
@@ -631,7 +634,7 @@ TEST(wallet_tests, cached_witnesses_chain_tip) {
 
         // Re-incrementing with the same block should give the same result
         uint256 anchor4;
-        wallet.IncrementNoteWitnesses(NULL, &block2, tree);
+        wallet.IncrementNoteWitnesses(&index2, &block2, tree);
         witnesses.clear();
         wallet.GetNoteWitnesses(notes, witnesses, anchor4);
         EXPECT_TRUE((bool) witnesses[0]);
